@@ -201,7 +201,7 @@ counts_scaled %>%
 counts_de <- counts_tt %>% 
   test_differential_abundance(
     .formula = ~ 0 + dex + cell,
-    .contrasts = c('dextrt - dexuntrt', na.rm = TRUE)
+    .contrasts = c('dextrt - dexuntrt')
   )
 
 counts_de %>% pivot_transcript()
