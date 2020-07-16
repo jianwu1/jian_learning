@@ -1,0 +1,212 @@
+---
+title: "A Tidy Transcriptomics Introduction to RNA-seq Analysis"
+author: "Jian"
+date: "16/07/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+```{r libraries, message = FALSE}
+# load libraries
+
+# tidyverse core packages
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(ggplot2)
+
+# tidyverse friendly packages 
+# (BiocManager::install("tidybulk"))
+# (BiocManager::install("ComplextHeatmap"))
+library(tidyHeatmap)
+library(tidybulk)
+library(ggrepel)
+library(plotly)
+
+# dataset (BiocManager::install("airway"))
+library(airway)
+```
+
+## Airway RNA-seq dataset
+
+Here we'll perform RNA-seq analyses with data from the _airway_ package. It includes 4 cell line samples treated with dex and 4 cell line control samples.
+
+## Setting up the data
+
+Convert the data from a _RangedSummarizedExperiment_ object into a _tibble_ object.
+
+```{r load data}
+# Load airway RNA-seq data
+data(airway)
+
+# Conver to tidybulk tibble
+counts_airway <- airway %>% 
+  tidybulk()
+```
+
+```{r view data, message=FALSE}
+# View data
+counts_airway
+```
+
+```{r edit data}
+# shorten entry
+counts_format <- counts_airway %>% 
+  mutate(sample = str_remove(sample, 'SRR1039'))
+```
+
+```{r add gene name, message = FALSE}
+# add gene names from Ensembl ID in feature
+counts_tt <- counts_format %>% 
+  ensembl_to_symbol(feature)
+
+counts_tt
+```
+
+```{r data setup, message = FALSE}
+# do everything at once with pipe
+counts_tt <- airway %>% 
+  tidybulk() %>% 
+  mutate(sample = str_remove(sample, 'SRR1039')) %>% 
+  ensembl_to_symbol(feature)
+```
+
+## Filter lowly expressed genes
+
+This is done by edgR function filterByExpr(), which is embeded in functions in tidybulk, e.g. scale_abundance(), test_differential_abundance().
+
+## Normalisation (scaling counts, here default Trimmed Mean M-value method)
+
+```{r normalisation, message = FALSE}
+counts_scaled <- counts_tt %>% 
+  scale_abundance(factor_of_interest = dex)
+
+counts_scaled
+```
+
+```{r comparison}
+# compare raw counts and normalised counts
+counts_scaled %>% pivot_longer(c('counts', 'counts_scaled'), names_to = 'source',
+                               values_to = 'abundance') %>% 
+  filter(!lowly_abundant) %>% 
+  ggplot(mapping = aes(x = abundance + 1, colour = sample)) +
+  geom_density() +
+  facet_wrap(facets = 'source', ncol = 2) +
+  scale_x_log10() +
+  theme_bw()
+
+# As can be seen, variations between samples have reduced.
+# Kernel density estimation is like a smoothed histogram.
+```
+
+**Exercises**
+1. The effect of filtering low counts:
+```{r filter effect}
+# no filtering
+counts_scaled %>% pivot_longer(c('counts', 'counts_scaled'), names_to = 'source',
+                               values_to = 'abundance') %>% 
+  ggplot(mapping = aes(x = abundance + 1, colour = sample)) +
+  geom_density() +
+  facet_wrap(facets = 'source', ncol = 2) +
+  scale_x_log10() +
+  theme_bw()
+```
+2. The the effect of filtering on count distribution
+```{r count distribution}
+# no filtering
+counts_scaled %>% 
+  pivot_longer(c('counts', 'counts_scaled'), names_to = 'source', 
+               values_to = 'abundance') %>% 
+  ggplot(mapping = aes(x = abundance + 1, colour = sample)) +
+  geom_boxplot() +
+  facet_wrap(facets = 'source', ncol = 2) +
+  scale_x_log10() +
+  theme_bw()
+
+# filtered
+counts_scaled %>% 
+  pivot_longer(c('counts', 'counts_scaled'), names_to = 'source', 
+               values_to = 'abundance') %>% 
+  filter(!lowly_abundant) %>% 
+  ggplot(mapping = aes(x = abundance + 1, colour = sample)) +
+  geom_boxplot() +
+  facet_wrap(facets = 'source', ncol = 2) +
+  scale_x_log10() +
+  theme_bw()
+
+# unfiltered lowly abundant reads hides sample variations.
+```
+
+# Exploratory Analyses
+
+## PCA plot
+
+```{r PCA}
+counts_scal_PCA <- counts_scaled %>% 
+  reduce_dimensions(method = 'PCA', .dims = 4)
+```
+
+```{r}
+# reduce dimensions to the number of samples
+counts_scal_PCA %>% 
+  pivot_sample()
+```
+
+```{r}
+# plot PCA
+counts_scal_PCA %>% 
+  pivot_sample() %>% 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = dex)) +
+  geom_point() +
+  geom_text_repel(aes(label = sample), show.legend = FALSE) +
+  theme_bw()
+
+# geom_text_repel: repulsive textual annotation, annotate the plot with text that are 
+# separated from each other. No need to show text annotation in the legend.
+```
+
+*Exercises*
+1.
+```{r}
+counts_scal_PCA %>% 
+  pivot_sample() %>% 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = cell, shape = dex)) +
+  geom_point() +
+  geom_text_repel(aes(label = sample), show.legend = FALSE) +
+  theme_bw()
+```
+2.
+The greatest variation comes from PC1, which is 
+
+## Hierachical clustering with heatmap
+```{r}
+counts_scaled %>% 
+  keep_variable(.abundance = counts_scaled, top = 500) %>% 
+  heatmap(.column = sample, 
+          .row = feature, 
+          .value = counts_scaled, 
+          annotation = c(dex, cell),
+          transform = log1p)
+```
+
+# Differential expression
+```{r}
+counts_de <- counts_tt %>% 
+  test_differential_abundance(
+    .formula = ~ 0 + dex + cell,
+    .contrasts = c('dextrt - dexuntrt', na.rm = TRUE)
+  )
+
+counts_de %>% pivot_transcript()
+
+```
+
+
+
