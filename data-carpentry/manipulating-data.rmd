@@ -1,0 +1,286 @@
+---
+title: "manipulating-data"
+author: "Jian"
+date: "16/07/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+load data
+```{r}
+surveys <- read_csv('data_raw/portal_data_joined.csv')
+str(surveys)
+View(surveys)
+```
+
+subset columns
+```{r}
+select(surveys, 'plot_id', 'species_id', 'weight')
+```
+or
+```{r}
+select(surveys, -c('record_id', 'species_id'))
+```
+
+choose rows on specific conditions
+```{r}
+filter(surveys, year == 1995)
+```
+
+```{r}
+surveys2 <- filter(surveys, weight < 5)
+```
+
+```{r}
+surveySml <- select(surveys2, 'species_id', 'sex', 'weight')
+```
+
+```{r}
+surveySml <- select(filter(surveys, weight < 5), 'species_id', 'sex', 'weight')
+```
+
+pipes
+```{r}
+surveySml <- surveys %>% 
+  filter(weight < 5) %>% 
+  select('species_id', 'sex', 'weight')
+
+surveySml
+```
+
+```{r}
+surveys %>% 
+  filter(year < 1995) %>% 
+  select(year, sex, weight)
+```
+
+create new columns
+```{r}
+surveys %>% 
+  mutate(weight_kg = weight / 1000) %>% 
+  head()
+```
+
+```{r}
+surveys %>% 
+  mutate(weight_kg = weight / 1000,
+         weight_lb = weight_kg * 2.2) %>% 
+  head()
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(weight)) %>% 
+  mutate(weight_kg = weight / 1000) %>% 
+  head()
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(hindfoot_length)) %>% 
+  mutate(hindfoot_cm = hindfoot_length / 10) %>% 
+  filter(hindfoot_cm < 3) %>% 
+  select(species_id, hindfoot_cm)
+```
+
+calculate the mean weight for each of the categories in sex
+```{r}
+surveys %>% 
+  group_by(sex) %>% 
+  summarise(meanWeight = mean(weight, na.rm = TRUE))
+```
+
+```{r}
+surveys %>% 
+  group_by(sex, species_id) %>% 
+  summarise(meanWeight = mean(weight, na.rm = TRUE)) %>% 
+  tail()
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(weight)) %>% 
+  group_by(sex, species_id) %>% 
+  summarise(meanWeight = mean(weight)) %>% 
+  tail()
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(weight)) %>% 
+  group_by(sex, species_id) %>% 
+  summarise(maxWeight = max(weight),
+            minWeight = min(weight))
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(weight)) %>% 
+  group_by(sex, species_id) %>% 
+  summarise(maxWeight = max(weight),
+            minWeight = min(weight)) %>% 
+  arrange(minWeight)
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(weight)) %>% 
+  group_by(sex, species_id) %>% 
+  summarise(meanWeight = mean(weight),
+            maxWeight = max(weight),
+            minWeight = min(weight)) %>% 
+  arrange(desc(meanWeight))
+```
+
+```{r}
+surveys %>% 
+  count(sex)
+```
+
+```{r}
+surveys %>% 
+  group_by(sex) %>% 
+  summarise(count = n())
+```
+
+```{r}
+surveys %>% 
+  count(sex, sort = TRUE)
+```
+
+```{r}
+surveys %>% 
+  count(sex, species) %>% 
+  View()
+```
+
+```{r}
+surveys %>% 
+  count(sex, species) %>% 
+  arrange(species, desc(n))
+```
+
+```{r}
+surveys %>% 
+  count(plot_type)
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(hindfoot_length)) %>% 
+  group_by(species_id) %>% 
+  summarise(meanHindLen = mean(hindfoot_length),
+            minHindLen = min(hindfoot_length),
+            maxHindLen = max(hindfoot_length),
+            Count = n()) %>% 
+  arrange(species_id, Count) # how can I arrange count in descending order?
+```
+
+```{r}
+surveys %>% 
+  filter(!is.na(weight)) %>% 
+  group_by(year) %>% 
+  filter(weight == max(weight)) %>% 
+  select(year, genus, species_id, weight) %>% 
+  arrange(year)
+```
+
+```{r}
+surveysGenusWeight <- surveys %>% 
+  filter(!is.na(weight)) %>% 
+  group_by(plot_id, genus) %>% 
+  summarise(meanWeight = mean(weight))
+```
+
+```{r}
+view(surveysGenusWeight)
+
+surveys_spread <- surveysGenusWeight %>% 
+  spread(key = genus, value = meanWeight)
+```
+
+```{r}
+surveys_spread <- surveysGenusWeight %>% 
+  spread(genus, meanWeight, fill = 0)
+view(surveys_spread)
+```
+
+```{r}
+surveys_gather <- surveys_spread %>% 
+  gather(key = species_id, value = meanWeight, -plot_id)
+view(surveys_gather)
+```
+
+```{r}
+surveys_gather <- surveys_spread %>% 
+  gather(key = species_id, value = meanWeight, Baiomys:Spermophilus)
+view(surveys_gather)
+```
+
+```{r}
+genera_spread <- surveys %>% 
+  group_by(plot_id, year) %>%
+  summarise(n_genera = n_distinct(genus)) %>% 
+  spread(key = year, value = n_genera)
+
+View(genera_spread)
+```
+
+```{r}
+genera_gather <- genera_spread %>% 
+  gather(key = year, value = n_genera, -plot_id)
+
+View(genera_gather)
+```
+
+```{r}
+surveys_measurement <- surveys %>% 
+  gather(key = 'measurement', value = 'value', hindfoot_length, weight)
+View(surveys_measurement)
+```
+
+```{r}
+surveys_mean_measure <-  surveys_measurement %>%
+  group_by(year, measurement, plot_type) %>% 
+  summarise(mean_value = mean(value, na.rm = TRUE)) %>%
+  spread(measurement, mean_value)
+View(surveys_mean_measure)   
+```
+
+## Export data
+### remove invalid data
+```{r}
+surveys_complete <- surveys %>% 
+  filter(!is.na(hindfoot_length),
+         !is.na(weight),
+         !is.na(sex))
+```
+
+### extract the most common species (n >= 50)
+```{r}
+species_count <- surveys_complete %>% 
+  count(species_id) %>% 
+  filter(n >= 50)
+```
+
+### only keep the most common species
+```{r}
+surveys_complete <- surveys_complete %>% 
+  filter(species_id %in% species_count$species_id)
+
+dim(surveys_complete)
+View(surveys_complete)
+```
+
+```{r}
+write_csv(surveys_complete, path = 'data/surveys_complete.csv')
+```
+
+The end
