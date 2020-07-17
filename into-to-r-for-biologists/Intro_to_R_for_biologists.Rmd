@@ -1,0 +1,285 @@
+---
+title: "Intro_to_R_for_biologists"
+author: "Jian"
+date: "17/07/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load library
+```{r}
+library(tidyverse)
+```
+
+Read in breast cancer RNA-seq data
+```{r}
+counts = read_csv("GSE60450_GeneLevel_Normalized(CPM.and.TMM)_data.csv")
+sampleInfo = read_csv("GSE60450_filtered_metadata.csv")
+```
+
+view what is stored in variables
+```{r}
+sampleInfo
+counts
+```
+
+dimension of variables-> rows by columns
+```{r}
+dim(sampleInfo)
+dim(counts)
+```
+
+view the first 6 lines by default or specify more lines through Arg
+```{r}
+head(sampleInfo)
+?head # check Arg n
+head(sampleInfo, 8)
+```
+
+view the last 6 lines
+```{r}
+tail(sampleInfo)
+```
+
+view the whole variable
+```{r}
+View(sampleInfo)# or just click on the variable in the Environment pane
+View(counts)
+```
+
+view column vectors
+```{r}
+sampleInfo$X1
+sampleInfo$immunophenotype
+```
+
+view values from a to b [a:b] in a column vector
+```{r}
+sampleInfo$X1[1:3]
+sampleInfo$X1[2:4]
+sampleInfo$immunophenotype[1:3]
+```
+
+view the structure of the data
+```{r}
+str(sampleInfo)
+str(counts)
+```
+
+summary of data: length of string vectors refers to num of coordinates, whereas for numerical vectors: min, max, 1st quartile, 2nd quartile(median), 3rd quartile
+```{r}
+summary(counts)
+summary(sampleInfo)
+```
+
+###  Excercises 1-4
+```{r}
+# 1.
+?head
+head(sampleInfo, n = 8)
+# 2.
+subsetCounts = head(counts, n = 20)
+# 3.
+subsetCounts$GSM1480291
+# 4.
+mean(subsetCounts$GSM1480291)
+```
+
+Formatting the data
+```{r}
+seqData = pivot_longer(counts, col = starts_with('GSM'), names_to = 'Sample', values_to = 'Count')
+
+# or
+seqData = pivot_longer(counts, col = GSM1480291:GSM1480302, names_to = 'Sample', values_to = 'Count')
+
+# or
+seqData = pivot_longer(counts, col = -c('X1', 'gene_symbol'), names_to = 'Sample', values_to = 'Count')
+
+allInfo = full_join(seqData, sampleInfo, by = c('Sample' = 'X1'))
+```
+
+Plot data
+```{r}
+ggplot(allInfo, mapping = aes(x = Sample, y = log2(Count + 1), colour = Sample)) + 
+  geom_violin()
+```
+
+```{r}
+ggplot(allInfo, mapping = aes(x = Sample, y = log2(Count + 1), fill = Sample)) +
+  geom_violin()
+```
+
+```{r}
+ggplot(allInfo, mapping = aes(x = Sample, y = log2(Count + 1), 
+                              fill = characteristics)) + geom_boxplot()
+```
+
+```{r}
+ggplot(allInfo, mapping = aes(x = Sample, y = log2(Count + 1), 
+                              fill = `developmental stage`)) + geom_boxplot()
+```
+
+Shorten Category names
+```{r}
+allInfo <-  mutate(allInfo, Group = case_when(
+  str_detect(characteristics, 'basal.*virgin') ~ 'bvirg',
+  str_detect(characteristics, 'basal.*preg') ~ 'bpreg',
+  str_detect(characteristics, 'basal.*lact') ~ 'blact',
+  str_detect(characteristics, 'luminal.*virgin') ~ 'lvirg',
+  str_detect(characteristics, 'luminal.*preg') ~ 'lpreg',
+  str_detect(characteristics, 'luminal.*lact') ~ 'llact',
+))
+```
+
+Select 8 genes with the highest counts summed across all samples
+```{r}
+myGenes <-  allInfo %>%
+  group_by(gene_symbol) %>%
+  summarise(Total_count = sum(Count)) %>%  # remove repeated values
+  arrange(desc(Total_count)) %>% # Arrange data into descending order
+  head(n = 8) %>%
+  pull(gene_symbol) # Pull out a single variable
+```
+
+Filter data
+```{r}
+myGenesCounts = filter(allInfo, gene_symbol %in% myGenes)
+```
+
+Create plot for each of the 8 genes
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), fill = Group)) +
+  geom_boxplot() +
+  facet_wrap(~ gene_symbol)
+```
+
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1),fill = Group)) +
+  geom_point() +
+  facet_wrap(~ gene_symbol)
+```
+
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol)
+```
+
+customise plots
+1. colours
+```{r}
+myColours = c('turquoise', 'plum', 'tomato', 'violet', 'steelblue', 'chocolate')
+
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  scale_colour_manual(values = myColours)
+```
+
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  scale_colour_brewer(palette = 'Dark2')
+```
+
+2. axis
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'Count', 
+       title = 'Mammary gland RNA-seq data')
+```
+
+3. theme
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'log2(Count + 1)', 
+       title = 'Mammary gland RNA-seq data') +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'log2(Count + 1)', 
+       title = 'Mammary gland RNA-seq data') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'log2(Count + 1)', 
+       title = 'Mammary gland RNA-seq data') +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+ggplot(data = myGenesCounts, 
+       mapping = aes(x = Group, y = log2(Count + 1), colour = Group)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'log2(Count + 1)', 
+       title = 'Mammary gland RNA-seq data') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+```
+
+order and categories(levels)
+```{r}
+groupOrder = c('bvirg', 'bpreg', 'blact', 'lvirg', 'lpreg', 'llact')
+
+myGenesCounts = mutate(myGenesCounts, Group_f = factor(Group, levels = groupOrder))
+
+ggplot(myGenesCounts, 
+       mapping = aes(x = Group_f, y = log2(Count + 1), colour = Group_f)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'log2(Count + 1)', 
+       title = 'Mammary gland RNA-seq data') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+```
+
+save the plot
+```{r}
+pdf('myplot.pdf')
+
+ggplot(myGenesCounts, mapping = aes(x = Group_f, y = log2(Count + 1), colour = Group_f)) +
+  geom_jitter() +
+  facet_wrap(~ gene_symbol) +
+  labs(x = 'Cell type and stage', y = 'log2(Count + 1)', title = 'Mammary gland RNA-seq data') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+dev.off()
+```
+
+The end
